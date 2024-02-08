@@ -1,0 +1,52 @@
+server:
+  port: 8080
+
+spring:
+  r2dbc:
+    url: r2dbc:pool:mysql://localhost:3306/webflux_security_db
+#    url: r2dbc:pool:mysql://host.docker.internal:3306/webflux_security_db
+    username: root
+    password: password
+  datasource:
+    url: jdbc:mysql://localhost:3306/
+#    url: jdbc:mysql://host.docker.internal:3306/
+    name: webflux_security_db
+  flyway:
+    url: ${spring.datasource.url}${spring.datasource.name}
+    locations: classpath:db/migration
+    user: ${spring.r2dbc.username}
+    password: ${spring.r2dbc.password}
+
+logging:
+  level:
+    root: INFO
+    org:
+      springframework:
+        security: INFO
+
+app:
+  s3:
+    bucket-name:
+    key-prefix:
+    aws-access-key-id:
+    aws-secret-access-key:
+
+jwt:
+  password:
+    encoder:
+      secret: FZK2DZ82odqS13e8aENggaMbb_fAkl-nJL4AEVBX43g
+      iteration: 64
+      keylength: 256
+  secret: b5f59337a612a2a7dc07328f3e7d1a04722967c7f06df20a499a7d3f91ff2a7e
+  expiration: 36000
+  issuer: proselyte
+
+springdoc:
+  enable-hateoas: false
+  swagger-ui:
+    enabled: true
+    config-url: "/v3/api-docs/swagger-config"
+    url: "/v3/api-docs"
+    path: "/swagger-ui.html"
+  api-docs:
+    path: "/v3/api-docs"

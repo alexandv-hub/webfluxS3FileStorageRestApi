@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  user-file-storage-service:
+    build:
+      context: ./
+      dockerfile: Dockerfile-dev
+    ports:
+      - "8080:8080"
+
+volumes:
+  mysql:

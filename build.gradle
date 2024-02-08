@@ -1,0 +1,56 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version "$springBootVersion"
+	id 'io.spring.dependency-management' version "$springDependencyManagementVersion"
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	sourceCompatibility = '17'
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+	implementation('org.springframework.boot:spring-boot-starter-hateoas') {
+		exclude group: 'org.springframework.boot', module: 'spring-boot-starter-web'
+	}
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation "io.jsonwebtoken:jjwt:$jsonWebTokenVersion"
+
+	implementation "org.flywaydb:flyway-mysql:$flywayMySqlVersion"
+	implementation "org.projectlombok:lombok:$lombokVersion"
+
+	implementation "org.mapstruct:mapstruct:$mapStructVersion"
+
+	implementation "software.amazon.awssdk:s3:$awssdkS3Version"
+
+	implementation "org.springdoc:springdoc-openapi-starter-webflux-ui:$springdocOpenapiStarterWebfluxUiVersion"
+
+	implementation "com.mysql:mysql-connector-j:$mysqlConnectorJVersion"
+	implementation "io.asyncer:r2dbc-mysql:$r2dbcMysqlVersion"
+
+	compileOnly 'org.projectlombok:lombok'
+
+	annotationProcessor 'org.projectlombok:lombok'
+	annotationProcessor "org.mapstruct:mapstruct-processor:$mapStructVersion"
+
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'io.projectreactor:reactor-test'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
