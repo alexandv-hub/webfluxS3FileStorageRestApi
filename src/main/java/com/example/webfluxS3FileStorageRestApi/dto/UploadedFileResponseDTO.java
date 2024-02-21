@@ -1,20 +1,19 @@
 package com.example.webfluxS3FileStorageRestApi.dto;
 
-import com.example.webfluxS3FileStorageRestApi.model.File;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
 @AllArgsConstructor
-@Builder(toBuilder = true)
+@Builder
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public class EventDTO {
+public class UploadedFileResponseDTO {
 
-    private Long id;
-    private Long userId;
-    private Long fileId;
-    private File file;
+    private String fileName;
+    private LocalDateTime uploadDateTime;
 }

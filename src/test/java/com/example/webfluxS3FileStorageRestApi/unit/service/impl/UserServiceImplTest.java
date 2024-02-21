@@ -1,11 +1,17 @@
-package com.example.webfluxS3FileStorageRestApi.service.impl;
+package com.example.webfluxS3FileStorageRestApi.unit.service.impl;
 
-import com.example.webfluxS3FileStorageRestApi.dto.UserDTO;
+import com.example.webfluxS3FileStorageRestApi.dto.*;
+import com.example.webfluxS3FileStorageRestApi.mapper.EventMapper;
 import com.example.webfluxS3FileStorageRestApi.mapper.UserMapper;
+import com.example.webfluxS3FileStorageRestApi.model.Event;
+import com.example.webfluxS3FileStorageRestApi.model.File;
 import com.example.webfluxS3FileStorageRestApi.model.UserEntity;
 import com.example.webfluxS3FileStorageRestApi.model.UserRole;
+import com.example.webfluxS3FileStorageRestApi.repository.EventRepository;
+import com.example.webfluxS3FileStorageRestApi.repository.FileRepository;
 import com.example.webfluxS3FileStorageRestApi.repository.UserRepository;
 import com.example.webfluxS3FileStorageRestApi.security.CustomPrincipal;
+import com.example.webfluxS3FileStorageRestApi.service.impl.UserServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,11 +40,17 @@ public class UserServiceImplTest {
     @Mock
     private UserRepository userRepository;
     @Mock
+    private EventRepository eventRepository;
+    @Mock
+    private FileRepository fileRepository;
+    @Mock
     private Authentication authentication;
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
     private UserMapper userMapper;
+    @Mock
+    private EventMapper eventMapper;
 
     @InjectMocks
     private UserServiceImpl userService;
@@ -46,25 +58,36 @@ public class UserServiceImplTest {
 
     @Test
     void registerUser_Success() {
+        String username = "username";
+        String firstName = "Alex";
+        String lastName = "Petrov";
         String rawPassword = "password";
         String encodedPassword = "encodedPassword";
 
+        UserRegisterRequestDTO userRegisterRequestDTO = new UserRegisterRequestDTO(username, rawPassword, firstName, lastName);
+
         UserEntity userEntity = UserEntity.builder()
-                .username("testUser")
+                .username(username)
+                .firstName(firstName)
+                .lastName(lastName)
                 .password(rawPassword)
                 .build();
 
         when(passwordEncoder.encode(rawPassword)).thenReturn(encodedPassword);
+        when(userMapper.map(eq(userRegisterRequestDTO))).thenReturn(userEntity);
 
         when(userRepository.save(any(UserEntity.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-        StepVerifier.create(userService.registerUser(userEntity))
+        StepVerifier.create(userService.registerUser(userRegisterRequestDTO))
                 .assertNext(savedUser -> {
+                    assert savedUser.getUsername().equals(username);
+                    assert savedUser.getFirstName().equals(firstName);
+                    assert savedUser.getLastName().equals(lastName);
                     assert savedUser.getPassword().equals(encodedPassword);
                     assert savedUser.isEnabled();
                     assert savedUser.getRole() == UserRole.USER;
                     assert savedUser.getCreatedAt() != null;
-                    assert savedUser.getUpdatedAt() != null;
+                    assert savedUser.getUpdatedAt() == null;
                 })
                 .verifyComplete();
     }
@@ -98,31 +121,58 @@ public class UserServiceImplTest {
         verify(userRepository).findActiveById(userId);
     }
 
+
+
     @Test
     void getUserByIdAndAuth_AsAdminOrModerator_Success() {
         Long userId = 1L;
+        Long fileId = 2L;
+        Long eventId = 3L;
 
         CustomPrincipal customPrincipal = new CustomPrincipal(userId, "John Doe");
         Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
         when(authentication.getPrincipal()).thenReturn(customPrincipal);
         doReturn(authorities).when(authentication).getAuthorities();
 
-        UserEntity user = UserEntity.builder().build();
+        File file = new File();
+        file.setId(fileId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .fileId(fileId)
+                .build();
+
+        UserEntity user = new UserEntity();
         user.setId(userId);
+
+        EventDTO eventDTO = EventDTO.builder()
+                .id(event.getId())
+                .build();
 
         UserDTO userDTO = UserDTO.builder()
                 .id(userId)
                 .build();
 
         when(userRepository.findActiveById(userId)).thenReturn(Mono.just(user));
+        when(eventRepository.findAllActiveByUserId(userId)).thenReturn(Flux.just(event));
+        when(fileRepository.findActiveById(fileId)).thenReturn(Mono.just(file));
+        when(eventMapper.map(eq(event), eq(file))).thenReturn(eventDTO);
         when(userMapper.map(user)).thenReturn(userDTO);
 
         StepVerifier.create(userService.getUserByIdAndAuth(userId, Mono.just(authentication)))
-                .expectNext(userDTO)
+                .expectNextMatches(result ->
+                        result.getId().equals(userDTO.getId()) &&
+                        result.getEventDTOs().size() == 1 &&
+                        result.getEventDTOs().get(0).getId().equals(eventDTO.getId())
+                )
                 .verifyComplete();
 
         verify(userRepository).findActiveById(userId);
+        verify(eventRepository).findAllActiveByUserId(userId);
+        verify(fileRepository).findActiveById(fileId);
+        verify(eventMapper).map(eq(event), eq(file));
     }
+
 
 
     @Test
@@ -145,13 +195,27 @@ public class UserServiceImplTest {
     @Test
     void getUserByIdAndAuth_AsUser_Success() {
         Long principalId = 1L;
-        Long userIdFind = 1L;
+        Long userId = 1L;
+        Long fileId = 2L;
+        Long eventId = 3L;
 
         UserEntity user = new UserEntity();
-        user.setId(userIdFind);
+        user.setId(userId);
+
+        Event event = Event.builder()
+                .id(eventId)
+                .fileId(fileId)
+                .build();
+
+        File file = new File();
+        file.setId(fileId);
+
+        EventDTO eventDTO = EventDTO.builder()
+                .id(eventId)
+                .build();
 
         UserDTO userDTO = UserDTO.builder()
-                .id(userIdFind)
+                .id(userId)
                 .build();
 
         CustomPrincipal customPrincipal = new CustomPrincipal(principalId, "John Doe");
@@ -159,14 +223,26 @@ public class UserServiceImplTest {
         when(authentication.getPrincipal()).thenReturn(customPrincipal);
         doReturn(authorities).when(authentication).getAuthorities();
 
-        when(userRepository.findActiveById(userIdFind)).thenReturn(Mono.just(user));
+        when(userRepository.findActiveById(userId)).thenReturn(Mono.just(user));
+        when(eventRepository.findAllActiveByUserId(userId)).thenReturn(Flux.just(event));
+        when(fileRepository.findActiveById(fileId)).thenReturn(Mono.just(file));
+        when(eventMapper.map(event, file)).thenReturn(eventDTO);
         when(userMapper.map(user)).thenReturn(userDTO);
 
-        StepVerifier.create(userService.getUserByIdAndAuth(userIdFind, Mono.just(authentication)))
-                .expectNext(userDTO)
+        StepVerifier.create(userService.getUserByIdAndAuth(userId, Mono.just(authentication)))
+                .expectNextMatches(userDto ->
+                        userDto.getId().equals(userId) &&
+                        userDto.getEventDTOs() != null &&
+                        userDto.getEventDTOs().size() == 1 &&
+                        userDto.getEventDTOs().get(0).getId().equals(eventDTO.getId())
+                )
                 .verifyComplete();
 
-        verify(userRepository).findActiveById(userIdFind);
+        verify(userRepository).findActiveById(userId);
+        verify(eventRepository).findAllActiveByUserId(userId);
+        verify(fileRepository).findActiveById(fileId);
+        verify(eventMapper).map(event, file);
+        verify(userMapper).map(user);
     }
 
 
@@ -202,7 +278,6 @@ public class UserServiceImplTest {
     }
 
 
-
     @Test
     void getAllUsers_ReturnsAllUsers() {
         Long user1Id = 1L;
@@ -214,22 +289,22 @@ public class UserServiceImplTest {
         UserEntity user2 = UserEntity.builder().build();
         user2.setId(user2Id);
 
-        UserDTO userDTO1 = UserDTO.builder()
-                .id(user1Id)
-                .build();
-        UserDTO userDTO2 = UserDTO.builder()
-                .id(user2Id)
-                .build();
-
         List<UserEntity> users = List.of(user1, user2);
-        List<UserDTO> userDTOs = List.of(userDTO1, userDTO2);
+
+        UserBasicDTO userBasicDTO1 = UserBasicDTO.builder().build();
+        userBasicDTO1.setId(user1Id);
+
+        UserBasicDTO userBasicDTO2 = UserBasicDTO.builder().build();
+        userBasicDTO2.setId(user2Id);
+
+        List<UserBasicDTO> userBasicDTOs = List.of(userBasicDTO1, userBasicDTO2);
 
         when(userRepository.findAllActive()).thenReturn(Flux.fromIterable(users));
-        when(userMapper.map(user1)).thenReturn(userDTO1);
-        when(userMapper.map(user2)).thenReturn(userDTO2);
+        when(userMapper.mapToUserBasicDTO(user1)).thenReturn(userBasicDTO1);
+        when(userMapper.mapToUserBasicDTO(user2)).thenReturn(userBasicDTO2);
 
         StepVerifier.create(userService.getAllUsers())
-                .expectNextSequence(userDTOs)
+                .expectNextSequence(userBasicDTOs)
                 .verifyComplete();
 
         verify(userRepository).findAllActive();
@@ -238,75 +313,85 @@ public class UserServiceImplTest {
 
 
     @Test
-    void updateUser_UserExistsAndPasswordChanged_UpdatesSuccessfully() {
-        UserEntity user = UserEntity.builder()
-                .username("existingUser")
-                .password("oldPassword")
+    void updateUserById_UserExistsAndPasswordChanged_UpdatesSuccessfully() {
+        Long userId = 1L;
+        String oldPassword = "oldPassword";
+        String newPassword = "newPassword";
+        String existingUserUsername = "existingUserUsername";
+        String newUsername = "newUsername";
+        String encodedNewPassword = "encodedNewPassword";
+        String newFirstName = "Johny";
+        String newLastName = "Depp";
+
+        UserEntity existingUser = UserEntity.builder()
+                .username(existingUserUsername)
+                .password(oldPassword)
                 .role(UserRole.ADMIN)
                 .firstName("John")
                 .lastName("Doe")
                 .enabled(true)
                 .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
                 .build();
-        user.setId(1L);
+        existingUser.setId(userId);
 
-        UserDTO userDTO = UserDTO.builder()
-                .id(1L)
-                .username("newUsername")
-                .password("newPassword")
-                .role(UserRole.ADMIN)
-                .firstName("Johny")
-                .lastName("Depp")
+        UserUpdateRequestDTO userUpdateRequestDTO = UserUpdateRequestDTO.builder()
+                .password(newPassword)
+                .username(newUsername)
+                .role(UserRole.USER)
+                .firstName(newFirstName)
+                .lastName(newLastName)
                 .enabled(false)
-                .createdAt(user.getCreatedAt())
-                .updatedAt(LocalDateTime.now())
                 .build();
 
-        when(userRepository.findActiveById(userDTO.getId())).thenReturn(Mono.just(user));
-        when(userRepository.existsByUsernameAndIdNot(userDTO.getUsername(), userDTO.getId())).thenReturn(Mono.just(false));
-        when(passwordEncoder.encode(userDTO.getPassword())).thenReturn("encodedNewPassword");
-        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(user));
-        when(userMapper.map(any(UserEntity.class))).thenReturn(userDTO);
+        UserEntity updatedUser = UserEntity.builder()
+                .username(newUsername)
+                .password(encodedNewPassword)
+                .role(UserRole.USER)
+                .firstName(newFirstName)
+                .lastName(newLastName)
+                .enabled(false)
+                .createdAt(existingUser.getCreatedAt())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        updatedUser.setId(userId);
 
-        StepVerifier.create(userService.updateUser(userDTO))
-                .expectNextMatches(updatedUser ->
-                        updatedUser.getUsername().equals(userDTO.getUsername()) &&
-                        !updatedUser.getPassword().equals(user.getPassword()) &&
-                        updatedUser.getRole().equals(userDTO.getRole()) &&
-                        updatedUser.getFirstName().equals(userDTO.getFirstName()) &&
-                        updatedUser.getLastName().equals(userDTO.getLastName()) &&
-                        updatedUser.isEnabled() == userDTO.isEnabled() &&
-                        updatedUser.getCreatedAt().equals(user.getCreatedAt()) &&
-                        updatedUser.getUpdatedAt().isAfter(user.getCreatedAt())
-                        )
+        UserBasicDTO expectedUserBasicDTO = UserBasicDTO.builder()
+                .username(newUsername)
+                .password(encodedNewPassword)
+                .role(UserRole.USER)
+                .firstName(newFirstName)
+                .lastName(newLastName)
+                .enabled(false)
+                .createdAt(existingUser.getCreatedAt())
+                .updatedAt(updatedUser.getUpdatedAt())
+                .build();
+
+        when(userRepository.findActiveById(userId)).thenReturn(Mono.just(existingUser));
+        when(userRepository.existsByUsernameAndIdNot(existingUser.getUsername(), userId)).thenReturn(Mono.just(Boolean.FALSE));
+        when(passwordEncoder.encode(newPassword)).thenReturn(encodedNewPassword);
+        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(updatedUser));
+        when(userMapper.mapToUserBasicDTO(updatedUser)).thenReturn(expectedUserBasicDTO);
+
+        Mono<UserBasicDTO> result = userService.updateUserById(userId, userUpdateRequestDTO);
+
+        StepVerifier.create(result)
+                .expectNextMatches(userUpdateRequestDTO1 ->
+                        userUpdateRequestDTO1.getUsername().equals(expectedUserBasicDTO.getUsername()) &&
+                        userUpdateRequestDTO1.getRole().equals(expectedUserBasicDTO.getRole()) &&
+                        userUpdateRequestDTO1.getFirstName().equals(expectedUserBasicDTO.getFirstName()) &&
+                        userUpdateRequestDTO1.getLastName().equals(expectedUserBasicDTO.getLastName()) &&
+                        userUpdateRequestDTO1.isEnabled() == expectedUserBasicDTO.isEnabled() &&
+                        userUpdateRequestDTO1.getCreatedAt().equals(expectedUserBasicDTO.getCreatedAt()) &&
+                        userUpdateRequestDTO1.getUpdatedAt().equals(expectedUserBasicDTO.getUpdatedAt()) &&
+                        userUpdateRequestDTO1.getPassword().equals(expectedUserBasicDTO.getPassword())
+                )
                 .verifyComplete();
-    }
 
-    @Test
-    void updateUser_UsernameAlreadyTaken_ReturnsError() {
-        UserEntity user = UserEntity.builder().build();
-        UserDTO userDTO = UserDTO.builder().build();
-
-        when(userRepository.findActiveById(userDTO.getId())).thenReturn(Mono.just(user));
-        when(userRepository.existsByUsernameAndIdNot(userDTO.getUsername(), userDTO.getId())).thenReturn(Mono.just(true));
-
-        StepVerifier.create(userService.updateUser(userDTO))
-                .expectErrorMatches(error -> error instanceof ResponseStatusException
-                                             && ((ResponseStatusException) error).getStatusCode().equals(HttpStatus.BAD_REQUEST))
-                .verify();
-    }
-
-    @Test
-    void updateUser_UserDoesNotExist_ReturnsError() {
-        UserDTO userDTO = UserDTO.builder().build();
-
-        when(userRepository.findActiveById(userDTO.getId())).thenReturn(Mono.empty());
-
-        StepVerifier.create(userService.updateUser(userDTO))
-                .expectErrorMatches(error -> error instanceof ResponseStatusException
-                                             && ((ResponseStatusException) error).getStatusCode().equals(HttpStatus.NOT_FOUND))
-                .verify();
+        verify(userRepository).findActiveById(userId);
+        verify(userRepository).existsByUsernameAndIdNot(existingUser.getUsername(), userId);
+        verify(passwordEncoder).encode(newPassword);
+        verify(userRepository).save(any(UserEntity.class));
+        verify(userMapper).mapToUserBasicDTO(any(UserEntity.class));
     }
 
 

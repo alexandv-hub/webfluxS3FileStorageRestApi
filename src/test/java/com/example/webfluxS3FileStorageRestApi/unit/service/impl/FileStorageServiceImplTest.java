@@ -1,5 +1,6 @@
-package com.example.webfluxS3FileStorageRestApi.service.impl;
+package com.example.webfluxS3FileStorageRestApi.unit.service.impl;
 
+import com.example.webfluxS3FileStorageRestApi.dto.UploadedFileResponseDTO;
 import com.example.webfluxS3FileStorageRestApi.model.Event;
 import com.example.webfluxS3FileStorageRestApi.model.File;
 import com.example.webfluxS3FileStorageRestApi.model.UserEntity;
@@ -7,6 +8,7 @@ import com.example.webfluxS3FileStorageRestApi.repository.EventRepository;
 import com.example.webfluxS3FileStorageRestApi.repository.FileRepository;
 import com.example.webfluxS3FileStorageRestApi.repository.FileStorageRepository;
 import com.example.webfluxS3FileStorageRestApi.security.CustomPrincipal;
+import com.example.webfluxS3FileStorageRestApi.service.impl.FileStorageServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -20,6 +22,8 @@ import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.core.Authentication;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+
+import java.time.LocalDateTime;
 import java.util.Objects;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -53,6 +57,7 @@ class FileStorageServiceImplTest {
                 .build();
 
         Event event = new Event();
+        UploadedFileResponseDTO uploadedFileResponseDTO = new UploadedFileResponseDTO(fileName, LocalDateTime.now());
 
         when(filePart.filename()).thenReturn(fileName);
         when(authentication.getPrincipal()).thenReturn(new CustomPrincipal(userId, "username"));
@@ -60,10 +65,10 @@ class FileStorageServiceImplTest {
 
         when(fileRepository.save(any(File.class))).thenReturn(Mono.just(file));
         when(eventRepository.save(any(Event.class))).thenReturn(Mono.just(event));
-        when(fileStorageRepository.uploadUserFileToStorage(filePart)).thenReturn(Mono.empty());
+        when(fileStorageRepository.uploadUserFileToStorage(filePart)).thenReturn(Mono.just(uploadedFileResponseDTO));
 
         StepVerifier.create(fileStorageService.uploadUserFileToStorage(filePart, authMono))
-                .expectNextMatches(responseEntity -> responseEntity.getStatusCode() == HttpStatus.OK)
+                .expectNext(uploadedFileResponseDTO)
                 .verifyComplete();
     }
 

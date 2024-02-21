@@ -10,22 +10,15 @@ import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 @AllArgsConstructor
 @SuperBuilder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public class UserDTO {
-
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-    private Long id;
+public class UserUpdateRequestDTO {
 
     private String username;
-
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
-
     private UserRole role;
     private String firstName;
     private String lastName;
@@ -33,11 +26,6 @@ public class UserDTO {
 
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private LocalDateTime createdAt;
-
-    private LocalDateTime updatedAt;
-
-    @JsonProperty("events")
-    private List<EventDTO> eventDTOs;
 
     @ToString.Include(name = "password")
     private String maskPassword() {

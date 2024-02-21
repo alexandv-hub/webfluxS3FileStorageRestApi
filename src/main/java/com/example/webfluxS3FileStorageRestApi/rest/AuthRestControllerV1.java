@@ -2,9 +2,9 @@ package com.example.webfluxS3FileStorageRestApi.rest;
 
 import com.example.webfluxS3FileStorageRestApi.dto.AuthRequestDTO;
 import com.example.webfluxS3FileStorageRestApi.dto.AuthResponseDTO;
-import com.example.webfluxS3FileStorageRestApi.dto.UserDTO;
+import com.example.webfluxS3FileStorageRestApi.dto.UserBasicDTO;
+import com.example.webfluxS3FileStorageRestApi.dto.UserRegisterRequestDTO;
 import com.example.webfluxS3FileStorageRestApi.mapper.UserMapper;
-import com.example.webfluxS3FileStorageRestApi.model.UserEntity;
 import com.example.webfluxS3FileStorageRestApi.security.CustomPrincipal;
 import com.example.webfluxS3FileStorageRestApi.security.SecurityService;
 import com.example.webfluxS3FileStorageRestApi.service.UserService;
@@ -27,10 +27,9 @@ public class AuthRestControllerV1 {
 
     @PostMapping("/register")
     @Operation(summary = "Register a new user", description = "Register a new user with role USER by default")
-    public Mono<UserDTO> register(@RequestBody UserDTO userDTO) {
-        UserEntity entity = userMapper.map(userDTO);
-        return userService.registerUser(entity)
-                .map(userMapper::map);
+    public Mono<UserBasicDTO> register(@RequestBody UserRegisterRequestDTO userRegisterRequestDTO) {
+        return userService.registerUser(userRegisterRequestDTO)
+                .map(userMapper::mapToUserBasicDTO);
     }
 
     @PostMapping("/login")
@@ -49,10 +48,10 @@ public class AuthRestControllerV1 {
 
     @GetMapping("/info")
     @Operation(summary = "Get user details", description = "Get user details by JWT token")
-    public Mono<UserDTO> getUserInfo(Authentication authentication) {
+    public Mono<UserBasicDTO> getUserInfo(Authentication authentication) {
         CustomPrincipal customPrincipal = (CustomPrincipal) authentication.getPrincipal();
 
         return userService.getUserById(customPrincipal.getId())
-                .map(userMapper::map);
+                .map(userMapper::mapToUserBasicDTO);
     }
 }

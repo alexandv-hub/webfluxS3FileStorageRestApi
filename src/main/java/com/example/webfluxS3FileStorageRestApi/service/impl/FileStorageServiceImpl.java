@@ -1,5 +1,6 @@
 package com.example.webfluxS3FileStorageRestApi.service.impl;
 
+import com.example.webfluxS3FileStorageRestApi.dto.UploadedFileResponseDTO;
 import com.example.webfluxS3FileStorageRestApi.model.Event;
 import com.example.webfluxS3FileStorageRestApi.model.File;
 import com.example.webfluxS3FileStorageRestApi.model.UserRole;
@@ -9,6 +10,7 @@ import com.example.webfluxS3FileStorageRestApi.repository.FileStorageRepository;
 import com.example.webfluxS3FileStorageRestApi.security.CustomPrincipal;
 import com.example.webfluxS3FileStorageRestApi.service.EventService;
 import com.example.webfluxS3FileStorageRestApi.service.FileStorageService;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +44,13 @@ public class FileStorageServiceImpl implements FileStorageService {
     @Value("${app.s3.bucket-name}")
     private String s3BucketName;
 
+    private String S3_FILE_LOCATION;
+
+    @PostConstruct
+    private void init() {
+        S3_FILE_LOCATION = String.format("https://%s.s3.amazonaws.com/", s3BucketName);
+    }
+
     private final FileStorageRepository fileStorageRepository;
     private final EventService eventService;
     private final FileRepository fileRepository;
@@ -49,8 +58,8 @@ public class FileStorageServiceImpl implements FileStorageService {
 
     @Override
     @Transactional
-    public Mono<ResponseEntity<String>> uploadUserFileToStorage(FilePart filePart, Mono<Authentication> authMono) {
-        log.info("IN FileStorageServiceImpl uploadUserFileToStorage");
+    public Mono<UploadedFileResponseDTO> uploadUserFileToStorage(FilePart filePart, Mono<Authentication> authMono) {
+        log.info("IN FileStorageServiceImpl uploadUserFileToStorage:");
         return authMono
                 .flatMap(auth ->
                         extractUserId(auth)
@@ -58,7 +67,7 @@ public class FileStorageServiceImpl implements FileStorageService {
                 .flatMap(userContext -> {
                     long userId = userContext.userId();
                     String filename = filePart.filename();
-                    String location = "https://" + s3BucketName + ".s3.amazonaws.com/" + filename;
+                    String location = S3_FILE_LOCATION + filename;
 
                     File file = File.builder()
                             .location(location)
@@ -74,14 +83,10 @@ public class FileStorageServiceImpl implements FileStorageService {
                                 return eventRepository.save(event);
                             })
                             .then(fileStorageRepository.uploadUserFileToStorage(filePart))
-                            .then(Mono.just(ResponseEntity.ok(INFO_FILE_UPLOADED_SUCCESSFULLY_WITH_FILENAME + filename)))
                             .doOnSuccess(unused -> log.info(INFO_FILE_UPLOADED_SUCCESSFULLY_WITH_FILENAME_AND_USER_ID, filename, userId))
                             .doOnError(error -> log.error(ERR_UPLOADING_FILE_WITH_FILENAME_AND_USER_ID, filename, userId, error.getMessage()));
-                })
-                .defaultIfEmpty(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized"))
-                .onErrorResume(e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ERR_FILE_UPLOAD_FAILED + e.getMessage())));
+                });
     }
-
 
     private Mono<Long> extractUserId(Authentication authentication) {
         if (authentication.getPrincipal() instanceof CustomPrincipal customPrincipal) {
@@ -94,7 +99,6 @@ public class FileStorageServiceImpl implements FileStorageService {
             Long userId,
             Collection<? extends GrantedAuthority> authorities) {
     }
-
 
     @Override
     public Mono<ResponseEntity<Resource>> downloadFileFromStorageByFileNameAndAuth(String fileName, Mono<Authentication> authMono) {
@@ -115,7 +119,8 @@ public class FileStorageServiceImpl implements FileStorageService {
     }
 
     private Mono<Boolean> checkUserAccessToFile(String fileName, Long userId, Collection<? extends GrantedAuthority> authorities) {
-        if (authorities.stream().anyMatch(a -> a.getAuthority().equals("ROLE_" + UserRole.USER.name()))) {
+        if (authorities.stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_" + UserRole.USER.name()))) {
             return eventService.getEventByFileNameAndUserId(fileName, userId)
                     .map(e -> true)
                     .defaultIfEmpty(false);

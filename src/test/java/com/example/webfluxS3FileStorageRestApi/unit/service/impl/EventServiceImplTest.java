@@ -1,13 +1,16 @@
-package com.example.webfluxS3FileStorageRestApi.service.impl;
+package com.example.webfluxS3FileStorageRestApi.unit.service.impl;
 
+import com.example.webfluxS3FileStorageRestApi.dto.EventBasicDTO;
 import com.example.webfluxS3FileStorageRestApi.dto.EventDTO;
+import com.example.webfluxS3FileStorageRestApi.dto.EventUpdateRequestDTO;
 import com.example.webfluxS3FileStorageRestApi.mapper.EventMapper;
+import com.example.webfluxS3FileStorageRestApi.mapper.EventUpdateDTOMapper;
 import com.example.webfluxS3FileStorageRestApi.model.Event;
 import com.example.webfluxS3FileStorageRestApi.model.File;
-import com.example.webfluxS3FileStorageRestApi.model.UserEntity;
 import com.example.webfluxS3FileStorageRestApi.repository.EventRepository;
 import com.example.webfluxS3FileStorageRestApi.repository.FileRepository;
 import com.example.webfluxS3FileStorageRestApi.security.CustomPrincipal;
+import com.example.webfluxS3FileStorageRestApi.service.impl.EventServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -35,13 +38,15 @@ import static org.mockito.Mockito.*;
 class EventServiceImplTest {
 
     @Mock
+    private Authentication authentication;
+    @Mock
     private EventRepository eventRepository;
     @Mock
     private FileRepository fileRepository;
     @Mock
     private EventMapper eventMapper;
     @Mock
-    private Authentication authentication;
+    private EventUpdateDTOMapper eventUpdateDTOMapper;
 
     @InjectMocks
     private EventServiceImpl eventService;
@@ -53,17 +58,33 @@ class EventServiceImplTest {
     @Test
     void getEventByIdAndAuth_AsAdminOrModerator_Success() {
         Long eventId = 1L;
-        Long userId = 1L;
+        Long userId = 2L;
+        Long fileId = 3L;
 
         CustomPrincipal customPrincipal = new CustomPrincipal(userId, "John Doe");
         Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
         when(authentication.getPrincipal()).thenReturn(customPrincipal);
         doReturn(authorities).when(authentication).getAuthorities();
 
-        Event event = new Event();
+        File file = File.builder()
+                .id(fileId)
+                .build();
+
+        Event event = Event.builder()
+                .id(eventId)
+                .userId(userId)
+                .fileId(fileId)
+                .build();
+
+        EventDTO eventDTO = EventDTO.builder()
+                .id(eventId)
+                .userId(userId)
+                .fileId(fileId)
+                .file(file)
+                .build();
         when(eventRepository.findActiveById(eventId)).thenReturn(Mono.just(event));
-        EventDTO eventDTO = EventDTO.builder().build();
-        when(eventMapper.map(event)).thenReturn(eventDTO);
+        when(fileRepository.findActiveById(fileId)).thenReturn(Mono.just(file));
+        when(eventMapper.map(event, file)).thenReturn(eventDTO);
 
         StepVerifier.create(eventService.getEventByIdAndAuth(eventId, Mono.just(authentication)))
                 .expectNext(eventDTO)
@@ -96,10 +117,25 @@ class EventServiceImplTest {
     @Test
     void getEventByIdAndAuth_AsUser_Success() {
         Long eventId = 1L;
-        Long userId = 1L;
+        Long userId = 2L;
+        Long fileId = 3L;
 
-        Event event = new Event();
-        EventDTO eventDTO = EventDTO.builder().build();
+        File file = File.builder()
+                .id(fileId)
+                .build();
+
+        Event event = Event.builder()
+                .id(eventId)
+                .userId(userId)
+                .fileId(fileId)
+                .build();
+
+        EventDTO eventDTO = EventDTO.builder()
+                .id(eventId)
+                .userId(userId)
+                .fileId(fileId)
+                .file(file)
+                .build();
 
         CustomPrincipal customPrincipal = new CustomPrincipal(userId, "John Doe");
         Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
@@ -108,12 +144,13 @@ class EventServiceImplTest {
 
         when(eventRepository.findActiveByIdAndUserId(eventId, userId)).thenReturn(Mono.just(event));
         when(eventRepository.findActiveById(eventId)).thenReturn(Mono.just(event));
-        when(eventMapper.map(event)).thenReturn(eventDTO);
+        when(fileRepository.findActiveById(fileId)).thenReturn(Mono.just(file));
+        when(eventMapper.map(event, file)).thenReturn(eventDTO);
 
         StepVerifier.create(eventService.getEventByIdAndAuth(eventId, Mono.just(authentication)))
                 .expectNext(eventDTO)
                 .verifyComplete();
-        
+
         verify(eventRepository).findActiveByIdAndUserId(eventId, userId);
         verify(eventRepository).findActiveById(eventId);
     }
@@ -171,7 +208,7 @@ class EventServiceImplTest {
         when(eventMapper.map(event1, file1)).thenReturn(eventDTO1);
         when(eventMapper.map(event2, file2)).thenReturn(eventDTO2);
 
-        StepVerifier.create(eventService.getAllEvents(Mono.just(authentication)))
+        StepVerifier.create(eventService.getAllEventsByAuth(Mono.just(authentication)))
                 .expectNextSequence(eventDTOs)
                 .verifyComplete();
 
@@ -232,10 +269,10 @@ class EventServiceImplTest {
         when(eventMapper.map(event1, file1)).thenReturn(eventDTO1);
         when(eventMapper.map(event2, file2)).thenReturn(eventDTO2);
 
-        StepVerifier.create(eventService.getAllEvents(Mono.just(authentication)))
+        StepVerifier.create(eventService.getAllEventsByAuth(Mono.just(authentication)))
                 .expectNextSequence(userEventDTOs)
                 .verifyComplete();
-        
+
         verify(eventRepository).findAllActiveByUserId(userId);
         verify(eventRepository, never()).findAllActive();
     }
@@ -256,22 +293,25 @@ class EventServiceImplTest {
                 .id(eventId)
                 .userId(originalUserId)
                 .fileId(originalFileId)
-                .user(new UserEntity())
-                .file(new File())
                 .build();
 
-        EventDTO updatedEventDTO = EventDTO.builder()
+        EventUpdateRequestDTO eventUpdateRequestDTO = EventUpdateRequestDTO.builder()
+                .userId(updatedUserId)
+                .fileId(updatedFileId)
+                .build();
+
+        EventBasicDTO eventBasicDTO = EventBasicDTO.builder()
                 .id(eventId)
                 .userId(updatedUserId)
                 .fileId(updatedFileId)
                 .build();
 
         when(eventRepository.findActiveById(eventId)).thenReturn(Mono.just(event));
-        when(eventRepository.save(any(Event.class))).thenReturn(Mono.just(event));
-        when(eventMapper.map(any(Event.class))).thenReturn(updatedEventDTO);
+        when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(eventUpdateDTOMapper.map(any(Event.class))).thenReturn(eventBasicDTO);
 
-        StepVerifier.create(eventService.updateEvent(updatedEventDTO))
-                .expectNext(updatedEventDTO)
+        StepVerifier.create(eventService.updateEventById(eventId, eventUpdateRequestDTO))
+                .expectNext(eventBasicDTO)
                 .verifyComplete();
 
         verify(eventRepository).save(eventCaptor.capture());
@@ -286,15 +326,14 @@ class EventServiceImplTest {
         Long userId = 2L;
         Long fileId = 3L;
 
-        EventDTO eventDTO = EventDTO.builder()
-                .id(eventId)
+        EventUpdateRequestDTO eventUpdateRequestDTO = EventUpdateRequestDTO.builder()
                 .userId(userId)
                 .fileId(fileId)
                 .build();
 
         when(eventRepository.findActiveById(eventId)).thenReturn(Mono.empty());
 
-        StepVerifier.create(eventService.updateEvent(eventDTO))
+        StepVerifier.create(eventService.updateEventById(eventId, eventUpdateRequestDTO))
                 .expectError(ResponseStatusException.class)
                 .verify();
     }

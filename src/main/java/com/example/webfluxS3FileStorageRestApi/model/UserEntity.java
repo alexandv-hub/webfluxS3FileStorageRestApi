@@ -1,5 +1,7 @@
 package com.example.webfluxS3FileStorageRestApi.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.relational.core.mapping.Table;
@@ -16,7 +18,10 @@ import java.util.List;
 public class UserEntity extends BaseEntity {
 
     private String username;
+
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
+
     private UserRole role;
     private String firstName;
     private String lastName;
@@ -25,6 +30,7 @@ public class UserEntity extends BaseEntity {
     private LocalDateTime updatedAt;
 
     @Transient
+    @JsonIgnore
     private List<Event> events;
 
     @ToString.Include(name = "password")

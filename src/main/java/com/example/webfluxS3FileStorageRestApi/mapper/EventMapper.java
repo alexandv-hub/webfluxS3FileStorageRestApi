@@ -14,10 +14,11 @@ public interface EventMapper {
 
     @InheritInverseConfiguration
     @Mapping(target = "user", ignore = true)
-    Event map(EventDTO dto);
+    @Mapping(target = "status", ignore = true)
+    @Mapping(target = "file.status", ignore = true)
+    Event map(EventDTO eventDTO);
 
     @Mapping(source = "event.id", target = "id")
-    @Mapping(source = "file.id", target = "fileDTO.id")
-    @Mapping(source = "file.location", target = "fileDTO.location")
+    @Mapping(source = "file", target = "file")
     EventDTO map(Event event, File file);
 }

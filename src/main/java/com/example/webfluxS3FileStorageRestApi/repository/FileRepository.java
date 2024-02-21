@@ -10,10 +10,10 @@ import reactor.core.publisher.Mono;
 
 public interface FileRepository extends R2dbcRepository<File, Long> {
 
-    @Query("select * from File where status = 'ACTIVE' and id = :id")
+    @Query("select * from file where status = 'ACTIVE' and id = :id")
     Mono<File> findActiveById(@NonNull Long id);
 
-    @Query("select * from File where status = 'ACTIVE'")
+    @Query("select * from file where status = 'ACTIVE'")
     Flux<File> findAllActive();
 
     @Query(
@@ -29,7 +29,7 @@ public interface FileRepository extends R2dbcRepository<File, Long> {
 
     @Query(
             value = """
-            SELECT e.user_id
+            SELECT e.file_id
             FROM event e
             JOIN file f ON e.file_id = f.id
             WHERE SUBSTRING_INDEX(f.location, '/', -1) = :fileName
@@ -39,7 +39,7 @@ public interface FileRepository extends R2dbcRepository<File, Long> {
     Mono<Long> getIdByFileName(String fileName);
 
     @Modifying
-    @Query("update File f set status = 'DELETED' where f.id = :id and status = 'ACTIVE'")
+    @Query("update file f set status = 'DELETED' where f.id = :id and status = 'ACTIVE'")
     Mono<Void> deleteActiveById(Long id);
 
     @Modifying

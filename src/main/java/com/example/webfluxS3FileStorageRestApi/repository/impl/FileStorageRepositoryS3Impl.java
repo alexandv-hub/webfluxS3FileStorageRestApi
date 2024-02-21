@@ -1,5 +1,6 @@
 package com.example.webfluxS3FileStorageRestApi.repository.impl;
 
+import com.example.webfluxS3FileStorageRestApi.dto.UploadedFileResponseDTO;
 import com.example.webfluxS3FileStorageRestApi.repository.FileStorageRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -25,12 +26,19 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+
+import static com.example.webfluxS3FileStorageRestApi.messages.ErrorMessages.FileStorage.*;
+import static com.example.webfluxS3FileStorageRestApi.messages.InfoMessages.FileStorage.*;
 
 @Slf4j
 @Component
 public class FileStorageRepositoryS3Impl implements FileStorageRepository {
 
     private static final Region AWS_S3_REGION_EU_CENTRAL_1 = Region.EU_CENTRAL_1;
+
+    private static final String TMP_DIR_PATH = "/tmp/myapp";
+    private static final String TEMP_FILE_NAME_PREFIX = "tmp-file-";
 
     @Value("${app.s3.bucket-name}")
     private String bucketName;
@@ -56,34 +64,41 @@ public class FileStorageRepositoryS3Impl implements FileStorageRepository {
     }
 
     @Override
-    public Mono<Void> uploadUserFileToStorage(FilePart filePart) {
+    public Mono<UploadedFileResponseDTO> uploadUserFileToStorage(FilePart filePart) {
         String fileName = filePart.filename();
-        Path tempDir = Paths.get("/tmp/myapp");
-        Path tempFile = tempDir.resolve("file-" + fileName);
+        Path tempDir = Paths.get(TMP_DIR_PATH);
+        Path tempFile = tempDir.resolve(TEMP_FILE_NAME_PREFIX + fileName);
 
-        return Mono.fromCallable(() -> {
+        return Mono.fromRunnable(() -> {
                     try {
                         Files.createDirectories(tempDir);
-                        return null;
                     } catch (IOException e) {
-                        throw new RuntimeException("Create temp directory failed: " + tempDir, e);
+                        throw new RuntimeException(ERR_CREATE_TEMP_DIRECTORY_FAILED + tempDir, e);
                     }
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(filePart.transferTo(tempFile))
-                .doOnSuccess(aVoid -> log.info("File saved successfully: " + tempFile))
+                .doOnSuccess(aVoid -> log.info(INFO_FILE_SAVED_SUCCESSFULLY + tempFile))
                 .then(Mono.fromFuture(() ->
                         s3Client.putObject(PutObjectRequest.builder()
                                         .bucket(bucketName)
                                         .key(keyPrefix + "/" + fileName)
                                         .build(),
-                                AsyncRequestBody.fromFile(tempFile.toFile()))
-                ))
+                                AsyncRequestBody.fromFile(tempFile.toFile()))))
                 .subscribeOn(Schedulers.boundedElastic())
-                .doOnSuccess(aVoid -> log.info("File uploaded successfully to S3: " + bucketName))
-                .doOnError(error -> log.error("File upload to S3 failed: " + error.getMessage()))
-                .then();
+                .doOnSuccess(aVoid -> {
+                    log.info(INFO_FILE_UPLOADED_SUCCESSFULLY_TO_S_3 + bucketName);
+                    try {
+                        Files.delete(tempFile);
+                    } catch (IOException e) {
+                        String ERR_DELETE_TEMP_FILE_FAILED = "Delete temp file failed";
+                        log.error(ERR_DELETE_TEMP_FILE_FAILED + tempFile, e);
+                    }
+                })
+                .doOnError(error -> log.error(ERR_FILE_UPLOAD_TO_S_3_FAILED + error.getMessage()))
+                .thenReturn(new UploadedFileResponseDTO(fileName, LocalDateTime.now()));
     }
+
 
     @Override
     public Mono<ResponseEntity<Resource>> downloadFileFromStorage(String fileName) {
@@ -100,7 +115,7 @@ public class FileStorageRepositoryS3Impl implements FileStorageRepository {
                                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                                 .body((Resource) new ByteArrayResource(responseBytes.asByteArray()))
                 )
-                .doOnSuccess(aVoid -> log.info("File downloaded successfully from S3: " + fileName))
-                .doOnError(error -> log.error("File downloaded from S3 failed: " + fileName, error));
+                .doOnSuccess(aVoid -> log.info(INFO_FILE_DOWNLOADED_SUCCESSFULLY_FROM_S_3 + fileName))
+                .doOnError(error -> log.error(ERR_FILE_DOWNLOADED_FROM_S_3_FAILED + fileName, error));
     }
 }

@@ -1,12 +1,11 @@
-package com.example.webfluxS3FileStorageRestApi.service.impl;
+package com.example.webfluxS3FileStorageRestApi.unit.service.impl;
 
-import com.example.webfluxS3FileStorageRestApi.dto.FileDTO;
-import com.example.webfluxS3FileStorageRestApi.mapper.FileMapper;
 import com.example.webfluxS3FileStorageRestApi.model.Event;
 import com.example.webfluxS3FileStorageRestApi.model.File;
 import com.example.webfluxS3FileStorageRestApi.repository.EventRepository;
 import com.example.webfluxS3FileStorageRestApi.repository.FileRepository;
 import com.example.webfluxS3FileStorageRestApi.security.CustomPrincipal;
+import com.example.webfluxS3FileStorageRestApi.service.impl.FileServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,8 +37,6 @@ class FileServiceImplTest {
     @Mock
     private EventRepository eventRepository;
     @Mock
-    private FileMapper fileMapper;
-    @Mock
     private Authentication authentication;
 
     @InjectMocks
@@ -60,21 +57,15 @@ class FileServiceImplTest {
                 .location(location)
                 .build();
 
-        FileDTO fileDTO = FileDTO.builder()
-                .id(fileId)
-                .location(location)
-                .build();
-
         CustomPrincipal customPrincipal = new CustomPrincipal(userId, "John Doe");
         Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
         when(authentication.getPrincipal()).thenReturn(customPrincipal);
         doReturn(authorities).when(authentication).getAuthorities();
 
         when(fileRepository.findActiveById(fileId)).thenReturn(Mono.just(file));
-        when(fileMapper.map(file)).thenReturn(fileDTO);
 
         StepVerifier.create(fileService.getFileByIdAndAuth(fileId, Mono.just(authentication)))
-                .expectNext(fileDTO)
+                .expectNext(file)
                 .verifyComplete();
 
         verify(fileRepository).findActiveById(fileId);
@@ -112,11 +103,6 @@ class FileServiceImplTest {
                 .location(location)
                 .build();
 
-        FileDTO fileDTO = FileDTO.builder()
-                .id(fileId)
-                .location(location)
-                .build();
-
         CustomPrincipal customPrincipal = new CustomPrincipal(userId, "John Doe");
         Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
         when(authentication.getPrincipal()).thenReturn(customPrincipal);
@@ -124,10 +110,9 @@ class FileServiceImplTest {
 
         when(eventRepository.findActiveByFileIdAndUserId(fileId, userId)).thenReturn(Mono.just(new Event()));
         when(fileRepository.findActiveById(fileId)).thenReturn(Mono.just(file));
-        when(fileMapper.map(file)).thenReturn(fileDTO);
 
         StepVerifier.create(fileService.getFileByIdAndAuth(fileId, Mono.just(authentication)))
-                .expectNext(fileDTO)
+                .expectNext(file)
                 .verifyComplete();
 
         verify(eventRepository).findActiveByFileIdAndUserId(fileId, userId);
@@ -139,14 +124,10 @@ class FileServiceImplTest {
     @Test
     void getAllFiles_AsAdminOrModerator_ReturnsAllFiles() {
         Long userId = 1L;
+
         File file1 = new File();
         File file2 = new File();
-
-        FileDTO fileDTO1 = FileDTO.builder().build();
-        FileDTO fileDTO2 = FileDTO.builder().build();
-
         List<File> files = List.of(file1, file2);
-        List<FileDTO> fileDTOs = List.of(fileDTO1, fileDTO2);
 
         CustomPrincipal customPrincipal = new CustomPrincipal(userId, "John Doe");
         Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
@@ -154,11 +135,9 @@ class FileServiceImplTest {
         doReturn(authorities).when(authentication).getAuthorities();
 
         when(fileRepository.findAllActive()).thenReturn(Flux.fromIterable(files));
-        when(fileMapper.map(file1)).thenReturn(fileDTO1);
-        when(fileMapper.map(file2)).thenReturn(fileDTO2);
 
-        StepVerifier.create(fileService.getAllFiles(Mono.just(authentication)))
-                .expectNextSequence(fileDTOs)
+        StepVerifier.create(fileService.getAllFilesByAuth(Mono.just(authentication)))
+                .expectNextSequence(files)
                 .verifyComplete();
 
         verify(fileRepository, never()).findAllActiveByUserId(userId);
@@ -171,12 +150,7 @@ class FileServiceImplTest {
 
         File file1 = new File();
         File file2 = new File();
-
-        FileDTO fileDTO1 = FileDTO.builder().build();
-        FileDTO fileDTO2 = FileDTO.builder().build();
-
         List<File> userFiles = List.of(file1, file2);
-        List<FileDTO> userFileDTOs = List.of(fileDTO1, fileDTO2);
 
         CustomPrincipal customPrincipal = new CustomPrincipal(userId, "John Doe");
         Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
@@ -184,11 +158,9 @@ class FileServiceImplTest {
         doReturn(authorities).when(authentication).getAuthorities();
 
         when(fileRepository.findAllActiveByUserId(userId)).thenReturn(Flux.fromIterable(userFiles));
-        when(fileMapper.map(file1)).thenReturn(fileDTO1);
-        when(fileMapper.map(file2)).thenReturn(fileDTO2);
 
-        StepVerifier.create(fileService.getAllFiles(Mono.just(authentication)))
-                .expectNextSequence(userFileDTOs)
+        StepVerifier.create(fileService.getAllFilesByAuth(Mono.just(authentication)))
+                .expectNextSequence(userFiles)
                 .verifyComplete();
 
         verify(fileRepository, never()).findAllActive();
@@ -203,27 +175,21 @@ class FileServiceImplTest {
         String originalLocation = "/path/original/location.txt";
         String updatedLocation = "/path/updated/location.txt";
 
-        File file = File.builder()
+        File originalFile = File.builder()
                 .id(fileId)
                 .location(originalLocation)
                 .build();
 
-        FileDTO fileDTO = FileDTO.builder()
+        File fileWithUpdatedLocation = File.builder()
                 .id(fileId)
                 .location(updatedLocation)
                 .build();
 
-        FileDTO updatedFileDTO = FileDTO.builder()
-                .id(fileId)
-                .location(updatedLocation)
-                .build();
+        when(fileRepository.findActiveById(fileId)).thenReturn(Mono.just(originalFile));
+        when(fileRepository.save(any(File.class))).thenReturn(Mono.just(fileWithUpdatedLocation));
 
-        when(fileRepository.findActiveById(fileId)).thenReturn(Mono.just(file));
-        when(fileRepository.save(any(File.class))).thenReturn(Mono.just(file));
-        when(fileMapper.map(any(File.class))).thenReturn(updatedFileDTO);
-
-        StepVerifier.create(fileService.updateFile(fileDTO))
-                .expectNext(updatedFileDTO)
+        StepVerifier.create(fileService.updateFileById(fileId, fileWithUpdatedLocation))
+                .expectNext(fileWithUpdatedLocation)
                 .verifyComplete();
 
         verify(fileRepository).save(fileCaptor.capture());
@@ -231,20 +197,20 @@ class FileServiceImplTest {
         assertEquals(updatedLocation, savedFile.getLocation());
     }
 
+
     @Test
     void updateFile_FileDoesNotExist_ThrowsException() {
         Long fileId = 1L;
         String location = "/path/updated/location.txt";
 
-        File file = new File();
-        FileDTO fileDTO = FileDTO.builder()
+        File file = File.builder()
                 .id(fileId)
                 .location(location)
                 .build();
 
         when(fileRepository.findActiveById(fileId)).thenReturn(Mono.empty());
 
-        StepVerifier.create(fileService.updateFile(fileDTO))
+        StepVerifier.create(fileService.updateFileById(fileId, file))
                 .expectError(ResponseStatusException.class)
                 .verify();
 

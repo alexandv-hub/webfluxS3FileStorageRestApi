@@ -1,30 +1,27 @@
 package com.example.webfluxS3FileStorageRestApi.service;
 
+import com.example.webfluxS3FileStorageRestApi.dto.UserBasicDTO;
 import com.example.webfluxS3FileStorageRestApi.dto.UserDTO;
+import com.example.webfluxS3FileStorageRestApi.dto.UserRegisterRequestDTO;
+import com.example.webfluxS3FileStorageRestApi.dto.UserUpdateRequestDTO;
 import com.example.webfluxS3FileStorageRestApi.model.UserEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface UserService {
 
-    Mono<UserEntity> registerUser(UserEntity user);
+    Mono<UserEntity> registerUser(UserRegisterRequestDTO user);
     Mono<UserEntity> getUserByUsername(String username);
     Mono<UserEntity> getUserById(Long id);
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR')")
-    Flux<UserDTO> getAllUsers();
+    Flux<UserBasicDTO> getAllUsers();
 
-    @PreAuthorize("hasAnyRole('ADMIN')")
-    Mono<UserDTO> updateUser(UserDTO userDTO);
+    Mono<UserBasicDTO> updateUserById(Long id, UserUpdateRequestDTO userUpdateRequestDTO);
 
-    @PreAuthorize("hasAnyRole('ADMIN')")
     Mono<Void> deleteUserById(Long id);
 
-    @PreAuthorize("hasAnyRole('ADMIN')")
     Mono<Integer> deleteAllUsers();
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'USER')")
     Mono<UserDTO> getUserByIdAndAuth(Long id, Mono<Authentication> authMono);
 }

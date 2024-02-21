@@ -1,5 +1,6 @@
 package com.example.webfluxS3FileStorageRestApi.rest;
 
+import com.example.webfluxS3FileStorageRestApi.dto.UploadedFileResponseDTO;
 import com.example.webfluxS3FileStorageRestApi.service.FileStorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -9,6 +10,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
@@ -27,7 +29,8 @@ public class FileStorageRestControllerV1 {
             summary = "Upload a file to AWS S3 by user ID",
             description = "Uploads a file to AWS S3 with the specified user ID"
     )
-    public Mono<ResponseEntity<String>> uploadFile(@RequestPart("file") Mono<FilePart> filePartMono, Mono<Authentication> authMono) {
+    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'USER')")
+    public Mono<UploadedFileResponseDTO> uploadFile(@RequestPart("file") Mono<FilePart> filePartMono, Mono<Authentication> authMono) {
         return filePartMono.flatMap(filePart ->
                 fileStorageService.uploadUserFileToStorage(filePart, authMono)
         );
@@ -38,6 +41,7 @@ public class FileStorageRestControllerV1 {
             summary = "Download a file from AWS S3 by filename",
             description = "Downloads a file from AWS S3 with the specified filename"
     )
+    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'USER')")
     public Mono<ResponseEntity<Resource>> downloadFileByName(@PathVariable String fileName, Mono<Authentication> authMono) {
         return fileStorageService.downloadFileFromStorageByFileNameAndAuth(fileName, authMono);
     }

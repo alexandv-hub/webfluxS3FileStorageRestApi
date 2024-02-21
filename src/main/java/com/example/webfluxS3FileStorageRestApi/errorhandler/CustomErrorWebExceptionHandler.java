@@ -40,6 +40,8 @@ public class CustomErrorWebExceptionHandler implements ErrorWebExceptionHandler 
             errorPropertiesMap.put("path", exchange.getRequest().getPath().value());
             errorPropertiesMap.put("timestamp", Instant.now().toString());
 
+            exchange.getResponse().setStatusCode(responseStatusException.getStatusCode());
+
             try {
                 byte[] errorBytes = objectMapper.writeValueAsBytes(errorPropertiesMap);
                 exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);

@@ -1,7 +1,10 @@
 package com.example.webfluxS3FileStorageRestApi.service.impl;
 
+import com.example.webfluxS3FileStorageRestApi.dto.EventBasicDTO;
 import com.example.webfluxS3FileStorageRestApi.dto.EventDTO;
+import com.example.webfluxS3FileStorageRestApi.dto.EventUpdateRequestDTO;
 import com.example.webfluxS3FileStorageRestApi.mapper.EventMapper;
+import com.example.webfluxS3FileStorageRestApi.mapper.EventUpdateDTOMapper;
 import com.example.webfluxS3FileStorageRestApi.repository.EventRepository;
 import com.example.webfluxS3FileStorageRestApi.repository.FileRepository;
 import com.example.webfluxS3FileStorageRestApi.security.CustomPrincipal;
@@ -28,6 +31,7 @@ public class EventServiceImpl implements EventService {
     private final EventRepository eventRepository;
     private final FileRepository fileRepository;
     private final EventMapper eventMapper;
+    private final EventUpdateDTOMapper eventUpdateDTOMapper;
 
     @Override
     public Mono<EventDTO> getEventByIdAndAuth(Long id, Mono<Authentication> authMono) {
@@ -49,7 +53,9 @@ public class EventServiceImpl implements EventService {
                             .flatMap(event -> fileRepository.findActiveById(event.getFileId())
                                     .map(file -> eventMapper.map(event, file)));
                 })
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, getEventWithIdNotFoundStr(id))))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        String.format(ERR_EVENT_WITH_ID_NOT_FOUND, id))))
                 .doOnSuccess(unused -> log.info(INFO_EVENT_FOUND_SUCCESSFULLY_WITH_ID, id))
                 .doOnError(error -> log.error(ERR_FIND_EVENT_WITH_ID, id, error.getMessage()));
     }
@@ -63,8 +69,8 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public Flux<EventDTO> getAllEvents(Mono<Authentication> authMono) {
-        log.info("IN EventServiceImpl getAllEvents");
+    public Flux<EventDTO> getAllEventsByAuth(Mono<Authentication> authMono) {
+        log.info("IN EventServiceImpl getAllEventsByAuth");
         return authMono.flatMapMany(authentication -> {
                     CustomPrincipal principal = (CustomPrincipal) authentication.getPrincipal();
                     return isAdminOrModerator(Mono.just(authentication))
@@ -97,33 +103,36 @@ public class EventServiceImpl implements EventService {
         log.info("IN EventServiceImpl getEventByFileNameAndUserId: {}, {}", fileName, userId);
         return fileRepository.getIdByFileName(fileName)
                 .flatMap(fileId ->
-                        eventRepository.findActiveByFileIdAndUserId(userId, fileId)
+                        eventRepository.findActiveByFileIdAndUserId(fileId, userId)
                 )
                 .map(eventMapper::map)
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, ERR_EVENT_NOT_FOUND)));
     }
 
     @Override
-    public Mono<EventDTO> updateEvent(EventDTO eventDTO) {
-        log.info("IN EventServiceImpl updateEvent: {}", eventDTO);
-        Long eventDTOId = eventDTO.getId();
-        return eventRepository.findActiveById(eventDTOId)
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, getEventWithIdNotFoundStr(eventDTOId))))
-                .flatMap(event -> {
-                    event.setUserId(eventDTO.getUserId());
-                    event.setFileId(eventDTO.getFileId());
-                    return eventRepository.save(event);
+    public Mono<EventBasicDTO> updateEventById(Long id, EventUpdateRequestDTO eventUpdateRequestDTO) {
+        log.info("IN EventServiceImpl updateEventById: {}", eventUpdateRequestDTO);
+        return eventRepository.findActiveById(id)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        String.format(ERR_EVENT_WITH_ID_NOT_FOUND, id))))
+                .flatMap(foundEvent -> {
+                    foundEvent.setUserId(eventUpdateRequestDTO.getUserId());
+                    foundEvent.setFileId(eventUpdateRequestDTO.getFileId());
+                    return eventRepository.save(foundEvent);
                 })
-                .map(eventMapper::map)
-                .doOnSuccess(aVoid -> log.info(INFO_EVENT_UPDATED_SUCCESSFULLY_WITH_ID, eventDTOId))
-                .doOnError(error -> log.error(ERR_UPDATING_EVENT_WITH_ID, eventDTOId, error.getMessage()));
+                .map(eventUpdateDTOMapper::map)
+                .doOnSuccess(aVoid -> log.info(INFO_EVENT_UPDATED_SUCCESSFULLY_WITH_ID, id))
+                .doOnError(error -> log.error(ERR_UPDATING_EVENT_WITH_ID, id, error.getMessage()));
     }
 
     @Override
     public Mono<Void> deleteEventById(Long id) {
         log.info("IN EventServiceImpl deleteEventById: {}", id);
         return eventRepository.findActiveById(id)
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, getEventWithIdNotFoundStr(id))))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        String.format(ERR_EVENT_WITH_ID_NOT_FOUND, id))))
                 .flatMap(file -> {
                     log.info(INFO_DELETING_EVENT_WITH_ID, id);
                     return eventRepository.deleteActiveById(id);
@@ -137,7 +146,7 @@ public class EventServiceImpl implements EventService {
     public Mono<Integer> deleteAllEventsByUserId(Long userId) {
         log.info("IN EventServiceImpl deleteAllEventsByUserId: {}", userId);
         return eventRepository.deleteAllActiveByUserId(userId)
-                .doOnTerminate(() -> log.info(INFO_EVENTS_DELETED_SUCCESSFULLY_WITH_USER_ID, userId))
+                .doOnTerminate(() -> log.info(INFO_ALL_EVENTS_DELETED_SUCCESSFULLY_WITH_USER_ID, userId))
                 .doOnError(error -> log.error(ERR_DELETING_ALL_EVENTS_WITH_USER_ID, error.getMessage()));
     }
 
@@ -147,9 +156,5 @@ public class EventServiceImpl implements EventService {
         return eventRepository.deleteAllActive()
                 .doOnTerminate(() -> log.info(INFO_ALL_EVENTS_DELETED_SUCCESSFULLY))
                 .doOnError(error -> log.error(ERR_DELETING_ALL_EVENTS, error.getMessage()));
-    }
-
-    private String getEventWithIdNotFoundStr(Long id) {
-        return "Event with ID = '" + id + "' not found";
     }
 }

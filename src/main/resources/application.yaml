@@ -2,15 +2,15 @@ server:
   port: 8080
 
 spring:
-  r2dbc:
-    url: r2dbc:pool:mysql://localhost:3306/webflux_security_db
-#    url: r2dbc:pool:mysql://host.docker.internal:3306/webflux_security_db
-    username: root
-    password: password
   datasource:
-    url: jdbc:mysql://localhost:3306/
-#    url: jdbc:mysql://host.docker.internal:3306/
+#    url: jdbc:mysql://localhost:3306/
+    url: jdbc:mysql://host.docker.internal:3306/
     name: webflux_security_db
+  r2dbc:
+#    url: r2dbc:pool:mysql://localhost:3306/${spring.datasource.name}
+    url: r2dbc:pool:mysql://host.docker.internal:3306/${spring.datasource.name}
+    username: <your-database-username>
+    password: <your-database-password>
   flyway:
     url: ${spring.datasource.url}${spring.datasource.name}
     locations: classpath:db/migration
@@ -26,10 +26,10 @@ logging:
 
 app:
   s3:
-    bucket-name:
-    key-prefix:
-    aws-access-key-id:
-    aws-secret-access-key:
+    bucket-name: <your-s3-bucket-name>
+    key-prefix: <your-s3-key-prefix>
+    aws-access-key-id: <your-s3-aws-access-key-id>
+    aws-secret-access-key: <your-s3-aws-secret-access-key>
 
 jwt:
   password:

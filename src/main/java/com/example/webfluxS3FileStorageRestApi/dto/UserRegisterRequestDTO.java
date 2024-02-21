@@ -1,20 +1,23 @@
 package com.example.webfluxS3FileStorageRestApi.dto;
 
-import com.example.webfluxS3FileStorageRestApi.model.File;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.ToString;
 
 @Data
 @AllArgsConstructor
-@Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public class EventDTO {
+public class UserRegisterRequestDTO {
 
-    private Long id;
-    private Long userId;
-    private Long fileId;
-    private File file;
+    private String username;
+    private String password;
+    private String firstName;
+    private String lastName;
+
+    @ToString.Include(name = "password")
+    private String maskPassword() {
+        return "********";
+    }
 }

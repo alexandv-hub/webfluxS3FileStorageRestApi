@@ -1,7 +1,6 @@
 package com.example.webfluxS3FileStorageRestApi.service.impl;
 
-import com.example.webfluxS3FileStorageRestApi.dto.FileDTO;
-import com.example.webfluxS3FileStorageRestApi.mapper.FileMapper;
+import com.example.webfluxS3FileStorageRestApi.model.File;
 import com.example.webfluxS3FileStorageRestApi.repository.EventRepository;
 import com.example.webfluxS3FileStorageRestApi.repository.FileRepository;
 import com.example.webfluxS3FileStorageRestApi.security.CustomPrincipal;
@@ -27,30 +26,30 @@ public class FileServiceImpl implements FileService {
 
     private final FileRepository fileRepository;
     private final EventRepository eventRepository;
-    private final FileMapper fileMapper;
 
     @Override
-    public Mono<FileDTO> getFileByIdAndAuth(Long fileId, Mono<Authentication> authMono) {
-        log.info("IN FileServiceImpl getFileByIdAndAuth: {}", fileId);
+    public Mono<File> getFileByIdAndAuth(Long id, Mono<Authentication> authMono) {
+        log.info("IN FileServiceImpl getFileByIdAndAuth: {}", id);
         return authMono
                 .flatMap(authentication -> {
                     CustomPrincipal principal = (CustomPrincipal) authentication.getPrincipal();
                     return isAdminOrModerator(Mono.just(authentication))
                             .flatMap(isAdminOrModerator -> {
                                 if (isAdminOrModerator) {
-                                    return fileRepository.findActiveById(fileId);
+                                    return fileRepository.findActiveById(id);
                                 } else {
-                                    return existsByIdAndUserId(fileId, principal.getId())
+                                    return existsByIdAndUserId(id, principal.getId())
                                             .flatMap(exists -> exists ?
-                                                    fileRepository.findActiveById(fileId) :
+                                                    fileRepository.findActiveById(id) :
                                                     Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, ERR_ACCESS_DENIED)));
                                 }
-                            })
-                            .map(fileMapper::map);
+                            });
                 })
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, getFileWithIdNotFoundStr(fileId))))
-                .doOnSuccess(unused -> log.info(INFO_FILE_FOUND_SUCCESSFULLY_WITH_ID, fileId))
-                .doOnError(error -> log.error(ERR_FIND_FILE_WITH_ID, fileId, error.getMessage()));
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        String.format(ERR_FILE_WITH_ID_NOT_FOUND, id))))
+                .doOnSuccess(unused -> log.info(INFO_FILE_FOUND_SUCCESSFULLY_WITH_ID, id))
+                .doOnError(error -> log.error(ERR_FIND_FILE_WITH_ID, id, error.getMessage()));
     }
 
     @Override
@@ -62,8 +61,8 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    public Flux<FileDTO> getAllFiles(Mono<Authentication> authMono) {
-        log.info("IN FileServiceImpl getAllFiles");
+    public Flux<File> getAllFilesByAuth(Mono<Authentication> authMono) {
+        log.info("IN FileServiceImpl getAllFilesByAuth:");
         return authMono.flatMapMany(authentication -> {
                     CustomPrincipal principal = (CustomPrincipal) authentication.getPrincipal();
                     return isAdminOrModerator(Mono.just(authentication))
@@ -73,33 +72,42 @@ public class FileServiceImpl implements FileService {
                                 } else {
                                     return fileRepository.findAllActiveByUserId(principal.getId());
                                 }
-                            })
-                            .map(fileMapper::map);
+                            });
                 })
                 .doOnComplete(() -> log.info(INFO_FIND_ALL_FILES_FINISHED_SUCCESSFULLY))
                 .doOnError(error -> log.error(ERR_FIND_ALL_FILES, error.getMessage()));
     }
 
     @Override
-    public Mono<FileDTO> updateFile(FileDTO fileDTO) {
-        log.info("IN FileServiceImpl updateFile: {}", fileDTO);
-        Long fileDTOId = fileDTO.getId();
-        return fileRepository.findActiveById(fileDTOId)
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, getFileWithIdNotFoundStr(fileDTOId))))
-                .flatMap(file -> {
-                    file.setLocation(fileDTO.getLocation());
-                    return fileRepository.save(file)
-                            .map(fileMapper::map);
+    public Flux<File> getFilesByUserId(Long userId) {
+        log.info("IN FileServiceImpl getFilesByUserId: {}", userId);
+        return fileRepository.findAllActiveByUserId(userId)
+                .doOnComplete(() -> log.info(INFO_FIND_ALL_FILES_BY_USER_ID_FINISHED_SUCCESSFULLY))
+                .doOnError(error -> log.error(ERR_FIND_ALL_FILES_BY_USER_ID, error.getMessage()));
+    }
+
+    @Override
+    public Mono<File> updateFileById(Long id, File file) {
+        log.info("IN FileServiceImpl updateFileById: {}", file);
+        return fileRepository.findActiveById(id)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        String.format(ERR_FILE_WITH_ID_NOT_FOUND, id))))
+                .flatMap(foundFile -> {
+                    foundFile.setLocation(file.getLocation());
+                    return fileRepository.save(foundFile);
                 })
-                .doOnSuccess(aVoid -> log.info(INFO_FILE_UPDATED_SUCCESSFULLY_WITH_ID, fileDTOId))
-                .doOnError(error -> log.error(ERR_UPDATING_FILE_WITH_ID, fileDTOId, error.getMessage()));
+                .doOnSuccess(aVoid -> log.info(INFO_FILE_UPDATED_SUCCESSFULLY_WITH_ID, id))
+                .doOnError(error -> log.error(ERR_UPDATING_FILE_WITH_ID, id, error.getMessage()));
     }
 
     @Override
     public Mono<Void> deleteFileById(Long id) {
         log.info("IN FileServiceImpl deleteFileById: '{}'", id);
         return fileRepository.findActiveById(id)
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, getFileWithIdNotFoundStr(id))))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        String.format(ERR_FILE_WITH_ID_NOT_FOUND, id))))
                 .flatMap(file -> {
                     log.info(INFO_DELETING_FILE_WITH_ID, id);
                     return fileRepository.deleteActiveById(id);
@@ -113,20 +121,15 @@ public class FileServiceImpl implements FileService {
     public Mono<Integer> deleteAllFilesByUserId(Long userId) {
         log.info("IN FileServiceImpl deleteAllFilesByUserId: {}", userId);
         return fileRepository.deleteAllActiveByUserId(userId)
-                .doOnTerminate(() -> log.info(INFO_ALL_FILES_DELETED_SUCCESSFULLY))
-                .doOnError(error -> log.error(ERR_DELETING_ALL_FILES, error.getMessage()));
-
+                .doOnTerminate(() -> log.info(INFO_ALL_FILES_DELETED_SUCCESSFULLY_WITH_USER_ID, userId))
+                .doOnError(error -> log.error(ERR_DELETING_ALL_FILES_WITH_USER_ID, userId, error.getMessage()));
     }
 
     @Override
     public Mono<Integer> deleteAllFiles() {
         log.info("IN FileServiceImpl deleteAllFiles");
         return fileRepository.deleteAllActive()
-                .doOnTerminate(() -> log.info(INFO_ALL_FILES_DELETED_SUCCESSFULLY1))
-                .doOnError(error -> log.error(ERR_DELETING_ALL_FILES1, error.getMessage()));
-    }
-
-    private static String getFileWithIdNotFoundStr(Long id) {
-        return "File with ID = '" + id + "' not found";
+                .doOnTerminate(() -> log.info(INFO_ALL_FILES_DELETED_SUCCESSFULLY))
+                .doOnError(error -> log.error(ERR_DELETING_ALL_FILES, error.getMessage()));
     }
 }
