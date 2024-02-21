@@ -49,6 +49,13 @@ dependencies {
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'io.projectreactor:reactor-test'
+	testImplementation "org.springframework.security:spring-security-test:$springSecurityTestVersion"
+	testImplementation "org.testcontainers:testcontainers:$testContainersVersion"
+	testImplementation "org.testcontainers:junit-jupiter:$testContainersVersion"
+	testImplementation "org.testcontainers:r2dbc:$testContainersVersion"
+	testImplementation "org.testcontainers:mysql:$testContainersVersion"
+	testImplementation "org.testcontainers:localstack:$testContainersVersion"
+	testImplementation 'io.rest-assured:rest-assured'
 }
 
 tasks.named('test') {
